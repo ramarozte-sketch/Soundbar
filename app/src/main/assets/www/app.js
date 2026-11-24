@@ -230,6 +230,8 @@ function execRead(href, key) {
       await sleep(i === 0 ? 1500 : 2500);
       const j = await api('GET', '/devices/' + dev() + '/components/main/capabilities/execute/status');
       const pl = j && j.data && j.data.value && j.data.value.payload;
+      // Diagnóstico: mostra a resposta crua no registo (primeira e última tentativa)
+      if (i === 0 || i === 5) log('Resposta ' + href + ' (tentativa ' + (i + 1) + '): ' + short(JSON.stringify(j)).slice(0, 280));
       if (pl && Object.prototype.hasOwnProperty.call(pl, key)) return pl;
     }
     throw new Error('A soundbar não respondeu a ' + href);

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Soundbar estilizada com ondas de som (zona segura 66dp ao centro) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- ondas -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#5BC0FF"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M42,40 Q54,30 66,40" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#3D8BFF"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M35,34 Q54,18 73,34" />
+    <!-- barra -->
+    <path
+        android:fillColor="#E8EEF8"
+        android:pathData="M28,50 L80,50 Q84,50 84,54 L84,62 Q84,66 80,66 L28,66 Q24,66 24,62 L24,54 Q24,50 28,50 Z" />
+    <!-- grelha -->
+    <path
+        android:fillColor="#2A3A55"
+        android:pathData="M31,56 L77,56 L77,60 L31,60 Z" />
+    <!-- luz -->
+    <path
+        android:fillColor="#3D8BFF"
+        android:pathData="M52,63 L56,63 L56,64.5 L52,64.5 Z" />
+    <!-- subwoofer -->
+    <path
+        android:fillColor="#C9D3E3"
+        android:pathData="M44,70 L64,70 Q66,70 66,72 L66,84 Q66,86 64,86 L44,86 Q42,86 42,84 L42,72 Q42,70 44,70 Z" />
+    <path
+        android:fillColor="#2A3A55"
+        android:pathData="M54,72.5 A5.5,5.5 0 1,1 53.99,72.5 Z" />
+</vector>

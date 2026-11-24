@@ -226,15 +226,15 @@ function execRead(href, key) {
   return queued(async () => {
     await cmd('execute', 'execute', [href]);
     // Lê a resposta do "execute" no recurso de capacidade (como a integração de referência), com mais tempo de espera
-    for (let i = 0; i < 6; i++) {
-      await sleep(i === 0 ? 1500 : 2500);
+    for (let i = 0; i < 2; i++) {
+      await sleep(i === 0 ? 1500 : 3000);
       const j = await api('GET', '/devices/' + dev() + '/components/main/capabilities/execute/status');
       const pl = j && j.data && j.data.value && j.data.value.payload;
       // Diagnóstico: mostra a resposta crua no registo (primeira e última tentativa)
-      if (i === 0 || i === 5) log('Resposta ' + href + ' (tentativa ' + (i + 1) + '): ' + short(JSON.stringify(j)).slice(0, 280));
+      if (i === 0 || i === 1) log('Resposta ' + href + ' (tentativa ' + (i + 1) + '): ' + short(JSON.stringify(j)).slice(0, 280));
       if (pl && Object.prototype.hasOwnProperty.call(pl, key)) return pl;
     }
-    throw new Error('A soundbar não respondeu a ' + href);
+    throw new Error('A SmartThings não devolve o estado desta função (valor vazio)');
   });
 }
 function execWrite(href, prop, value) {
@@ -307,7 +307,7 @@ async function refreshStatus(quiet) {
   }
 }
 
-async function loadExec(which) {
+async function loadExec(which, force) {
   const jobs = {
     soundmode: async () => {
       const pl = await execRead(HREF.soundmode, NS + 'soundmode');
@@ -350,6 +350,7 @@ async function loadExec(which) {
     },
   };
   for (const k of which) {
+    if (!force && S.unsup[k]) continue; // já falhou: não repetir ao mudar de separador
     try {
       await jobs[k]();
       delete S.unsup[k];
@@ -372,7 +373,7 @@ async function loadTab(t, force) {
   if (!list.length || tabLoading[t] || (tabLoaded[t] && !force)) return;
   tabLoading[t] = 1;
   $('btnRefresh').classList.add('spin');
-  try { await loadExec(list); tabLoaded[t] = 1; }
+  try { await loadExec(list, force); tabLoaded[t] = 1; }
   finally { tabLoading[t] = 0; $('btnRefresh').classList.remove('spin'); }
 }
 

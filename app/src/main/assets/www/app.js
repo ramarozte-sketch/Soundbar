@@ -701,7 +701,7 @@ function renderSpeakers() {
   const cb = $('chanBox');
   for (const c of CHANNELS) {
     slider(cb, c.id, {
-      label: c.t, desc: c.d, min: -6, max: 6, value: S.channels[c.id], fmt: signed,
+      label: c.t, desc: c.d, min: -6, max: /Rear/.test(c.id) ? 12 : 6, value: S.channels[c.id], fmt: signed,
       onChange: v => setChannel(c.id, v), allowUnknown: true,
     });
   }

@@ -225,16 +225,11 @@ function queued(fn) {
 function execRead(href, key) {
   return queued(async () => {
     await cmd('execute', 'execute', [href]);
-    // Lê o estado completo (traz também a resposta do "execute") — poucas leituras, bem espaçadas
-    for (let i = 0; i < 3; i++) {
-      await sleep(i === 0 ? 1500 : 2000);
-      const st = await api('GET', '/devices/' + dev() + '/status');
-      parseStatus(st);
-      const ex = st && st.components && st.components.main && st.components.main.execute;
-      const data = ex && ex.data;
-      const pl = data && data.value && data.value.payload;
-      const h = data && data.data && data.data.href;
-      if (h && h !== href) continue;
+    // Lê a resposta do "execute" no recurso de capacidade (como a integração de referência), com mais tempo de espera
+    for (let i = 0; i < 6; i++) {
+      await sleep(i === 0 ? 1500 : 2500);
+      const j = await api('GET', '/devices/' + dev() + '/components/main/capabilities/execute/status');
+      const pl = j && j.data && j.data.value && j.data.value.payload;
       if (pl && Object.prototype.hasOwnProperty.call(pl, key)) return pl;
     }
     throw new Error('A soundbar não respondeu a ' + href);
@@ -989,9 +984,11 @@ function bind() {
   $('btnPrev').onclick = () => media('prev');
 
   $('btnChanReset').onclick = async () => {
-    for (const c of CHANNELS) if (S.channels[c.id] !== 0) await setChannel(c.id, 0);
+    // Um único comando com os seis canais (evita estourar o limite de pedidos)
+    const arr = CHANNELS.map(c => ({ name: c.id, value: 0 }));
+    CHANNELS.forEach(c => { S.channels[c.id] = 0; setHold('ch_' + c.id, 8000); });
     renderSpeakers();
-    toast('Canais repostos a 0');
+    await act(() => execWrite(HREF.channel, NS + 'channelVolume', arr), 'Canais repostos a 0');
   };
 
   $('btnPatOnly').onclick = doPatOnly;

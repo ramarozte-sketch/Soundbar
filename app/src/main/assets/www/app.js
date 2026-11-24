@@ -148,19 +148,51 @@ function errText(r) {
   return 'Erro ' + r.status;
 }
 
+/* Limites da SmartThings por dispositivo: ~12 leituras de estado e ~12 comandos por minuto.
+   Fica-se um pouco abaixo e os pedidos esperam a sua vez em vez de falharem. */
+const BUCKET = {
+  get: { limit: 9, times: [], until: 0 },
+  cmd: { limit: 10, times: [], until: 0 },
+};
+function bucketOf(method, path) {
+  if (!/^\/devices\/[^/]+\//.test(path)) return null;
+  return method === 'GET' ? BUCKET.get : BUCKET.cmd;
+}
+function budget(b) {
+  const now = Date.now();
+  b.times = b.times.filter(t => now - t < 60000);
+  return now < b.until ? 0 : b.limit - b.times.length;
+}
+async function take(b) {
+  for (; ;) {
+    const now = Date.now();
+    if (now < b.until) { await sleep(b.until - now + 50); continue; }
+    if (budget(b) > 0) { b.times.push(now); return; }
+    await sleep(60000 - (now - b.times[0]) + 100);
+  }
+}
+
 async function api(method, path, body) {
   const tok = await auth.token();
   const h = { 'Authorization': 'Bearer ' + tok, 'Accept': 'application/json' };
   if (body !== undefined) h['Content-Type'] = 'application/json';
   const payload = body !== undefined ? JSON.stringify(body) : '';
+  const b = bucketOf(method, path);
+  if (b) await take(b);
   let r = await http(method, API + path, h, payload);
   if (r.status === 401 && P.get('authMode') === 'oauth') {
     await auth.refresh();
     h.Authorization = 'Bearer ' + P.get('accessToken');
     r = await http(method, API + path, h, payload);
   }
-  if (r.status === 429) {
-    await sleep(2000);
+  for (let i = 0; i < 2 && r.status === 429; i++) {
+    const m = /retry in (\d+)/.exec(r.text || '');
+    const wait = clamp(m ? +m[1] : 15000, 1000, 65000);
+    log('Limite da SmartThings atingido — a aguardar ' + Math.round(wait / 1000) + ' s');
+    if (b) b.until = Date.now() + wait;
+    setHeader('off', 'A aguardar (limite de pedidos da SmartThings)…');
+    await sleep(wait + 100);
+    if (b) b.times.push(Date.now());
     r = await http(method, API + path, h, payload);
   }
   if (r.status < 200 || r.status >= 300) {
@@ -193,12 +225,16 @@ function queued(fn) {
 function execRead(href, key) {
   return queued(async () => {
     await cmd('execute', 'execute', [href]);
-    for (let i = 0; i < 12; i++) {
-      await sleep(i === 0 ? 350 : 500);
-      const j = await api('GET', '/devices/' + dev() + '/components/main/capabilities/execute/status');
-      const data = j && j.data;
+    // Lê o estado completo (traz também a resposta do "execute") — poucas leituras, bem espaçadas
+    for (let i = 0; i < 3; i++) {
+      await sleep(i === 0 ? 1500 : 2000);
+      const st = await api('GET', '/devices/' + dev() + '/status');
+      parseStatus(st);
+      const ex = st && st.components && st.components.main && st.components.main.execute;
+      const data = ex && ex.data;
       const pl = data && data.value && data.value.payload;
-      if (data && data.href && data.href !== href) continue;
+      const h = data && data.data && data.data.href;
+      if (h && h !== href) continue;
       if (pl && Object.prototype.hasOwnProperty.call(pl, key)) return pl;
     }
     throw new Error('A soundbar não respondeu a ' + href);
@@ -261,13 +297,10 @@ function parseStatus(j) {
 async function refreshStatus(quiet) {
   if (!dev()) return;
   try {
-    const [st, hl] = await Promise.all([
-      api('GET', '/devices/' + dev() + '/status'),
-      api('GET', '/devices/' + dev() + '/health').catch(() => null),
-    ]);
+    if (quiet && budget(BUCKET.get) < 4) return; // guarda leituras para as ações do utilizador
+    const st = await api('GET', '/devices/' + dev() + '/status');
     parseStatus(st);
-    if (hl && hl.state) S.online = hl.state === 'ONLINE';
-    else S.online = true;
+    S.online = true;
     renderAll();
   } catch (e) {
     if (e.noAuth) return authLost(e);
@@ -333,6 +366,19 @@ async function loadExec(which) {
 }
 const toBool = x => x === 1 || x === '1' || x === true || x === 'on' || x === 'On';
 
+// Cada separador só lê as suas funções avançadas quando é aberto (poupa pedidos)
+const TAB_EXEC = { remote: ['soundmode'], sound: ['advanced', 'woofer', 'eq', 'ava', 'spacefit'], speakers: ['channel', 'rear'], settings: [] };
+const tabLoaded = {};
+const tabLoading = {};
+async function loadTab(t, force) {
+  const list = TAB_EXEC[t] || [];
+  if (!list.length || tabLoading[t] || (tabLoaded[t] && !force)) return;
+  tabLoading[t] = 1;
+  $('btnRefresh').classList.add('spin');
+  try { await loadExec(list); tabLoaded[t] = 1; }
+  finally { tabLoading[t] = 0; $('btnRefresh').classList.remove('spin'); }
+}
+
 let busy = 0;
 async function refreshAll() {
   if (busy) return;
@@ -340,7 +386,7 @@ async function refreshAll() {
   $('btnRefresh').classList.add('spin');
   try {
     await refreshStatus();
-    await loadExec(['soundmode', 'advanced', 'woofer', 'ava', 'spacefit', 'eq', 'channel', 'rear']);
+    await loadTab(tab, true);
   } finally {
     busy = 0;
     $('btnRefresh').classList.remove('spin');
@@ -375,7 +421,7 @@ function setVolumeLocal(v) {
   setHold('volume', 6000);
   renderVolume();
   clearTimeout(volTimer);
-  volTimer = setTimeout(sendVolume, 350);
+  volTimer = setTimeout(sendVolume, 600);
 }
 async function sendVolume() {
   const v = S.volume;
@@ -674,14 +720,13 @@ function renderSettings() {
     a = '<b>Token temporário</b>. Os tokens SmartThings expiram 24 h depois de criados. Toca em "Tornar permanente" para não teres de repetir.';
   }
   $('authInfo').innerHTML = a;
-  $('btnMakePermanent').classList.toggle('hidden', m !== 'pat');
   $('btnRenew').classList.toggle('hidden', m !== 'oauth');
   $('devInfo').innerHTML = '<b>' + esc(P.get('deviceLabel', '—')) + '</b><br>Modelo: ' + esc(S.model || '—') + '<br>Firmware: ' + esc(S.fw || '—') +
     '<br>ID: <span style="font-size:12px">' + esc(dev()) + '</span>' +
     '<br>Funções disponíveis: ' + esc([...S.caps].filter(c => !c.startsWith('ocf')).join(', ') || '—');
   $('swHwKeys').checked = P.get('hwkeys', '1') !== '0';
   $('maxVol').value = P.get('maxVol', '100'); $('maxVolVal').textContent = $('maxVol').value; fill($('maxVol'));
-  $('pollSec').value = P.get('pollSec', '10'); $('pollVal').textContent = $('pollSec').value + ' s'; fill($('pollSec'));
+  $('pollSec').value = P.get('pollSec', '20'); $('pollVal').textContent = $('pollSec').value + ' s'; fill($('pollSec'));
   $('logBox').textContent = LOG.slice().reverse().join('\n') || '(vazio)';
 }
 
@@ -699,6 +744,7 @@ function goTab(t) {
   for (const b of document.querySelectorAll('nav button')) b.classList.toggle('sel', b.dataset.go === t);
   if (t === 'settings') renderSettings();
   if (t === 'sound' || t === 'speakers') renderAll();
+  if (dev() && P.get('authMode')) loadTab(t);
 }
 function showSetup(msg) {
   stopPoll();
@@ -752,7 +798,7 @@ async function createOAuthApp(pat) {
   const r = await http('POST', API + '/apps', { Authorization: 'Bearer ' + pat, 'Content-Type': 'application/json', Accept: 'application/json' }, JSON.stringify(body));
   log('Criar app OAuth → ' + r.status + ' ' + short(r.text).slice(0, 200));
   if (r.status < 200 || r.status >= 300) {
-    if (r.status === 403 || r.status === 401) throw new Error('O token não tem permissão para criar apps. Gera um token novo com as permissões de "Apps" marcadas.');
+    if (r.status === 403 || r.status === 401) throw new Error('A SmartThings recusou criar a app (403). Desde novembro de 2026, as apps com ligação permanente exigem um plano de programador pago da SmartThings. Usa o token de 24 h, ou vê a secção "Avançado" em baixo.');
     throw new Error('Não consegui criar a app OAuth: ' + errText(r));
   }
   const j = JSON.parse(r.text);
@@ -814,7 +860,7 @@ async function useCode(input) {
 async function doPermanent(patIn) {
   const pat = (patIn || $('inPat').value).trim();
   if (!pat && !P.get('clientId')) return setupMsg('Cola primeiro o token SmartThings.', true);
-  const b = $('btnPermanent'); b.disabled = true;
+  const b = $('btnAvancado') || { disabled: false };
   try {
     if (!P.get('clientId') || !P.get('clientSecret')) {
       setupMsg('A verificar o token…');
@@ -883,6 +929,7 @@ function chooseDevice(d) {
   P.set('deviceId', d.deviceId);
   P.set('deviceLabel', d.label || d.name || 'Soundbar');
   for (const k of ['soundmode', 'night', 'voice', 'bass', 'ava', 'spacefit', 'woofer', 'eqName', 'rear']) S[k] = null;
+  for (const k of Object.keys(tabLoaded)) delete tabLoaded[k];
   S.channels = {}; S.unsup = {}; S.raw = null; S.online = null; S.soundmodes = []; S.eqList = []; S.eqBands = null;
   log('Soundbar escolhida: ' + (d.label || d.name) + ' (' + d.deviceId + ')');
   startMain();
@@ -892,7 +939,7 @@ function chooseDevice(d) {
 let pollT = 0;
 function startPoll() {
   stopPoll();
-  const sec = clamp(+P.get('pollSec', '10'), 5, 60);
+  const sec = clamp(+P.get('pollSec', '20'), 10, 60);
   pollT = setInterval(() => { if (!busy && !document.hidden) refreshStatus(true); }, sec * 1000);
 }
 function stopPoll() { clearInterval(pollT); pollT = 0; }
@@ -947,7 +994,6 @@ function bind() {
     toast('Canais repostos a 0');
   };
 
-  $('btnPermanent').onclick = () => doPermanent();
   $('btnPatOnly').onclick = doPatOnly;
   $('btnOwnClient').onclick = () => {
     const cid = $('inCid').value.trim(), sec = $('inCsec').value.trim();
@@ -960,7 +1006,6 @@ function bind() {
   $('btnRetryLogin').onclick = startLogin;
 
   $('btnRenew').onclick = async () => { try { await auth.refresh(); toast('Acesso renovado ✓'); renderSettings(); } catch (e) { toast(e.message, true); } };
-  $('btnMakePermanent').onclick = () => { const pat = P.get('pat'); showSetup(); if (pat) { $('inPat').value = pat; doPermanent(pat); } };
   $('btnLogout').onclick = () => {
     for (const k of ['authMode', 'pat', 'accessToken', 'refreshToken', 'expiresAt', 'deviceId', 'deviceLabel']) P.set(k, '');
     showSetup('Sessão terminada.');

@@ -34,20 +34,20 @@
         <input type="password" id="inPat" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off">
       </label>
       <div class="btns">
-        <button class="btn primary full" id="btnPermanent">Ligar (ligação permanente)</button>
-        <button class="btn full" id="btnPatOnly">Usar só o token (expira em 24 h)</button>
+        <button class="btn primary full" id="btnPatOnly">Ligar com o token</button>
       </div>
       <p id="setupMsg"></p>
     </div>
 
     <div class="card">
-      <h2>Porquê "permanente"?</h2>
-      <p>Desde 2025 os tokens SmartThings só duram 24 horas. Com a ligação permanente, a app cria na tua conta uma pequena app privada SmartThings, pede-te para entrares uma vez com a conta Samsung e depois renova o acesso sozinha.</p>
+      <h2>O token dura 24 horas</h2>
+      <p>A SmartThings só deixa os tokens pessoais durarem 24 h. Quando expirar, a app volta a este ecrã: gera um token novo e cola-o (demora 1 minuto).</p>
+      <p>Para não teres de repetir, a SmartThings exige desde novembro de 2026 um <b>plano de programador pago</b> (cerca de 5 € por mês). Se o tiveres, cria uma app em "Avançado" em baixo.</p>
     </div>
 
     <div class="card">
-      <h2>Avançado</h2>
-      <p>Se já tens uma app SmartThings OAuth criada (Client ID e Secret), podes usá-la.</p>
+      <h2>Avançado — ligação permanente</h2>
+      <p>Requer o plano de programador SmartThings. Em <a href="#" data-ext="https://developer.smartthings.com/console">developer.smartthings.com/console</a> → <b>Service Integrations</b> → <b>Get Started</b>: dá um nome, em <b>Redirect URIs</b> põe <b>https://httpbin.org/get</b>, escolhe os scopes <b>r:devices:*</b>, <b>w:devices:*</b> e <b>x:devices:*</b> e grava. Cola aqui o Client ID e o Client Secret.</p>
       <label class="f">Client ID <input type="text" id="inCid" autocomplete="off"></label>
       <label class="f">Client Secret <input type="password" id="inCsec" autocomplete="off"></label>
       <label class="f">Endereço de retorno (redirect URI) <input type="text" id="inRedir" autocomplete="off"></label>
@@ -174,7 +174,6 @@
       <p id="authInfo">—</p>
       <div class="btns">
         <button class="btn" id="btnRenew">Renovar acesso agora</button>
-        <button class="btn" id="btnMakePermanent">Tornar permanente</button>
         <button class="btn danger" id="btnLogout">Terminar sessão</button>
       </div>
     </div>
@@ -197,9 +196,9 @@
         <div class="scale"><span>10</span><span>100</span></div>
       </div>
       <div class="slider">
-        <div class="top"><b>Atualizar estado a cada</b><span class="val" id="pollVal">10 s</span></div>
-        <input type="range" id="pollSec" min="5" max="60" step="5" value="10">
-        <div class="scale"><span>5 s</span><span>60 s</span></div>
+        <div class="top"><b>Atualizar estado a cada</b><span class="val" id="pollVal">20 s</span></div>
+        <input type="range" id="pollSec" min="10" max="60" step="5" value="20">
+        <div class="scale"><span>10 s</span><span>60 s</span></div>
       </div>
     </div>
 

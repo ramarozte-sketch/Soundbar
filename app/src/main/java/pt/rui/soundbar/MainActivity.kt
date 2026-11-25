@@ -73,9 +73,9 @@ class MainActivity : Activity() {
     private fun abrirPrefs(): SharedPreferences {
         val antigas = getSharedPreferences("soundbar", Context.MODE_PRIVATE)
         val segura = try {
-            val mk = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+            val alias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
             EncryptedSharedPreferences.create(
-                this, "soundbar_secure", mk,
+                "soundbar_secure", alias, this,
                 EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )

@@ -45,4 +45,5 @@ android {
 }
 
 dependencies {
+    implementation("androidx.security:security-crypto:1.0.0")
 }

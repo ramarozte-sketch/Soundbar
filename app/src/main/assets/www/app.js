@@ -230,8 +230,6 @@ function execRead(href, key) {
       await sleep(i === 0 ? 1500 : 3000);
       const j = await api('GET', '/devices/' + dev() + '/components/main/capabilities/execute/status');
       const pl = j && j.data && j.data.value && j.data.value.payload;
-      // Diagnóstico: mostra a resposta crua no registo (primeira e última tentativa)
-      if (i === 0 || i === 1) log('Resposta ' + href + ' (tentativa ' + (i + 1) + '): ' + short(JSON.stringify(j)).slice(0, 280));
       if (pl && Object.prototype.hasOwnProperty.call(pl, key)) return pl;
     }
     throw new Error('A SmartThings não devolve o estado desta função (valor vazio)');
@@ -669,8 +667,10 @@ function renderSound() {
     const val = S[a.key];
     inp.checked = !!val;
     const srcKey = a.href === HREF.advanced ? 'advanced' : a.key;
+    const noRead = !!S.unsup[srcKey];
     row.querySelector('.unk').textContent = val === null || val === undefined
-      ? (S.unsup[srcKey] ? 'Estado desconhecido — podes tentar mudar na mesma.' : 'A ler…') : '';
+      ? (noRead ? 'Sem leitura da SmartThings — toca para definir.' : 'A ler…')
+      : (noRead ? 'Sem leitura da SmartThings — mostra o último valor enviado.' : '');
   }
 
   const wb = $('wooferBox');
@@ -1021,6 +1021,57 @@ function bind() {
   $('btnCopyLog').onclick = () => Nat.copy(LOG.join('\n'));
   $('btnRaw').onclick = () => { $('logBox').textContent = JSON.stringify(S.raw, null, 1) || '(sem estado)'; };
 }
+
+/* ===================== predefinições ===================== */
+function presetsGet() { try { return JSON.parse(P.get('presets', '[]')) || []; } catch (e) { return []; } }
+function presetsPut(a) { P.set('presets', JSON.stringify(a)); }
+
+function presetSave() {
+  const list = presetsGet();
+  const p = { name: 'Predefinição ' + (list.length + 1) };
+  if (S.soundmode) p.soundmode = S.soundmode;
+  for (const a of ADV) if (S[a.key] !== null && S[a.key] !== undefined) p[a.key] = !!S[a.key];
+  if (S.woofer !== null && S.woofer !== undefined) p.woofer = S.woofer;
+  if (S.eqName) p.eq = S.eqName;
+  if (Object.keys(p).length === 1) return toast('Ainda não há valores para guardar', true);
+  list.push(p);
+  presetsPut(list);
+  renderPresets();
+  toast('Guardada: ' + p.name);
+}
+
+function presetDeleteLast() {
+  const list = presetsGet();
+  if (!list.length) return toast('Não há predefinições', true);
+  const r = list.pop();
+  presetsPut(list);
+  renderPresets();
+  toast('Apagada: ' + r.name);
+}
+
+async function presetApply(p) {
+  if (!S.power) return toast('Liga a soundbar primeiro', true);
+  toast('A aplicar ' + p.name + '…');
+  if (p.soundmode) { S.soundmode = p.soundmode; setHold('soundmode', 8000); await act(() => execWrite(HREF.soundmode, NS + 'soundmode', p.soundmode)); }
+  for (const a of ADV) {
+    if (p[a.key] === undefined) continue;
+    S[a.key] = p[a.key]; setHold(a.key, 8000);
+    await act(() => execWrite(a.href, a.prop, p[a.key] ? 1 : 0));
+  }
+  if (p.woofer !== undefined) { S.woofer = p.woofer; setHold('woofer', 8000); await act(() => execWrite(HREF.woofer, NS + 'woofer', p.woofer)); }
+  if (p.eq) { S.eqName = p.eq; setHold('eq', 8000); await act(() => execWrite(HREF.eq, NS + 'EQname', p.eq)); }
+  renderSound();
+  toast(p.name + ' aplicada');
+}
+
+function renderPresets() {
+  const list = presetsGet();
+  chips($('presetList'), list.map((p, i) => ({ v: i, t: p.name })), -1, i => presetApply(list[i]));
+}
+
+$('btnPresetSave').onclick = presetSave;
+$('btnPresetDel').onclick = presetDeleteLast;
+renderPresets();
 
 bind();
 boot();

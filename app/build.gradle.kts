@@ -16,22 +16,26 @@ android {
     }
 
     // Chave fixa: cada nova versão instala por cima da anterior sem perder a ligação à conta
+    // A chave vem dos segredos do GitHub Actions (nunca fica no repositório).
+    // Sem as variáveis, a compilação local usa a chave de debug do Android.
     signingConfigs {
-        create("soundbar") {
-            storeFile = file("soundbar.jks")
-            storePassword = "soundbar123"
-            keyAlias = "soundbar"
-            keyPassword = "soundbar123"
+        create("release") {
+            val ks = System.getenv("SB_KEYSTORE_PATH")
+            if (ks != null) {
+                storeFile = file(ks)
+                storePassword = System.getenv("SB_STORE_PASS")
+                keyAlias = System.getenv("SB_KEY_ALIAS")
+                keyPassword = System.getenv("SB_KEY_PASS")
+            }
         }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("soundbar")
-        }
-        debug {
-            signingConfig = signingConfigs.getByName("soundbar")
+            if (System.getenv("SB_KEYSTORE_PATH") != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

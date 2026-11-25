@@ -20,6 +20,7 @@ jobs:
         env:
           SB_KEYSTORE_B64: ${{ secrets.SB_KEYSTORE_B64 }}
         run: |
+          if [ -z "$SB_KEYSTORE_B64" ]; then echo "Sem segredo de chave: APK sem assinatura."; exit 0; fi
           echo "$SB_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/soundbar.jks"
           echo "SB_KEYSTORE_PATH=$RUNNER_TEMP/soundbar.jks" >> "$GITHUB_ENV"
 
@@ -61,6 +62,7 @@ jobs:
           path: saida/Soundbar-Q990B.apk
 
       - name: Publicar na página de Releases (link direto para o telemóvel)
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: soundbar-v${{ github.run_number }}

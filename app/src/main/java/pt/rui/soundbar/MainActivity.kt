@@ -12,8 +12,6 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKeys
 import android.os.Handler
 import android.os.Looper
 import android.view.KeyEvent
@@ -48,7 +46,7 @@ class MainActivity : Activity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        prefs = abrirPrefs()
+        prefs = Store.open(this)
 
         web = WebView(this)
         web.setBackgroundColor(Color.parseColor("#0B0F17"))
@@ -67,29 +65,6 @@ class MainActivity : Activity() {
         }
         setContentView(web)
         web.loadUrl("file:///android_asset/www/index.html")
-    }
-
-    /** Guarda token e definições cifrados. Migra os dados da versão antiga (texto simples) uma vez. */
-    private fun abrirPrefs(): SharedPreferences {
-        val antigas = getSharedPreferences("soundbar", Context.MODE_PRIVATE)
-        val segura = try {
-            val alias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
-            EncryptedSharedPreferences.create(
-                "soundbar_secure", alias, this,
-                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-            )
-        } catch (e: Exception) {
-            // Se o Android Keystore falhar, usa as preferências normais em vez de deixar a app sem arrancar
-            return antigas
-        }
-        if (segura.all.isEmpty() && antigas.all.isNotEmpty()) {
-            val ed = segura.edit()
-            for ((k, v) in antigas.all) if (v is String) ed.putString(k, v)
-            ed.apply()
-            antigas.edit().clear().apply()
-        }
-        return segura
     }
 
     private fun js(code: String) {
@@ -235,6 +210,11 @@ class MainActivity : Activity() {
         @JavascriptInterface
         fun oauth(url: String, redirectPrefix: String) {
             main.post { abrirLogin(url, redirectPrefix) }
+        }
+
+        @JavascriptInterface
+        fun widgets() {
+            SoundbarWidget.refreshAll(this@MainActivity)
         }
 
         @JavascriptInterface

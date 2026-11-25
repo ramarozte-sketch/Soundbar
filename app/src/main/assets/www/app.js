@@ -285,6 +285,9 @@ function parseStatus(j) {
   for (const cap of Object.keys(main)) {
     if (main[cap].detailName && main[cap].detailName.value) S.appName = main[cap].detailName.value;
   }
+  P.set('lastVolume', S.volume);
+  P.set('lastPower', S.power ? '1' : '0');
+  if (window.Native && Native.widgets) Native.widgets();
   S.model = v('ocf', 'mnmo') || S.model;
   S.fw = v('ocf', 'mnfv') || S.fw;
 }
